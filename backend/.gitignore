@@ -1,0 +1,53 @@
+# --- Go Binaries & Build Output ---
+# ビルドされたバイナリファイル（Windows, Mac, Linux）
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# 具体的な実行ファイル名（例としてよくある名前）
+main
+server
+app
+
+# --- Dependencies ---
+# go.mod / go.sum はコミットすべきですが、
+# vendor ディレクトリを使う場合はコメントアウトを外すか調整してください
+# vendor/
+
+# --- Go Workspace ---
+go.work
+
+# --- Environment Variables (重要！) ---
+# DBパスワードなどが書かれたファイルは絶対にコミットしない
+.env
+.env.local
+.env.*
+
+# --- IDE / Editor Settings ---
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ / GoLand
+.idea/
+*.iml
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+
+# --- OS Specific ---
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini

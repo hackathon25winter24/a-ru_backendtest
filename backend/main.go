@@ -6,19 +6,19 @@ import (
 	"log"
 	"net"
 	"os"
+
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"github.com/google/uuid"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
-	// 自動生成されたパッケージをインポート
-	// "my-app" の部分は go.mod のモジュール名に合わせてください
+	// ↓ go.mod のモジュール名に合わせてください
 	"my-app/pb"
 )
 
-// (前回の回答で定義したGORMモデル)
+// User モデル定義
 type User struct {
 	ID    uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	Hash  string
@@ -33,22 +33,18 @@ type server struct {
 
 // CreateUser の実装
 func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.UserResponse, error) {
-	// 1. リクエストからGORMモデルを作成
-	// IDはDB側で自動生成させるのでここでは指定しない
 	user := User{
 		Hash:  req.Hash,
-		Story: int(req.Story), // int32 -> int へのキャスト
+		Story: int(req.Story),
 		Rate:  int(req.Rate),
 	}
 
-	// 2. DBに保存
 	if err := s.db.Create(&user).Error; err != nil {
 		return nil, err
 	}
 
-	// 3. レスポンスを返す (UUIDを文字列に変換)
 	return &pb.UserResponse{
-		Id:    user.ID.String(), // uuid.UUID -> string
+		Id:    user.ID.String(),
 		Hash:  user.Hash,
 		Story: int32(user.Story),
 		Rate:  int32(user.Rate),
@@ -57,19 +53,16 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 
 // GetUser の実装
 func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserResponse, error) {
-	// 1. 文字列のIDを UUID型にパース（検証）
 	uid, err := uuid.Parse(req.Id)
 	if err != nil {
-		return nil, err // 不正なUUID形式の場合
+		return nil, err
 	}
 
 	var user User
-	// 2. 検索実行
 	if err := s.db.First(&user, "id = ?", uid).Error; err != nil {
 		return nil, err
 	}
 
-	// 3. レスポンス
 	return &pb.UserResponse{
 		Id:    user.ID.String(),
 		Hash:  user.Hash,
@@ -79,76 +72,68 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 }
 
 func main() {
-	// .envファイルを読み込む。
-	// 本番環境(NeoShowcase)には.envが無いのでエラーになるが、
-	// 本番では環境変数がシステムから注入されるので、このエラーは無視して続行してOK。
 	err := godotenv.Load()
 	if err != nil {
-		// .envが無かった場合。本番環境など。
 		fmt.Println("No .env file found, relying on system environment variables")
 	}
 
-
-	// 1. 環境変数から接続情報を取得（NeoShowcaseで設定される値）
+	// 1. DB接続情報の取得
 	host := os.Getenv("DB_HOST")
-	user := os.Getenv("DB_USER")
+	// 【修正1】変数名を dbUser に変更（構造体の user と被らないように）
+	dbUser := os.Getenv("DB_USER")
 	password := os.Getenv("DB_PASSWORD")
 	dbname := os.Getenv("DB_NAME")
-	port := os.Getenv("DB_PORT")
-	sslmode := os.Getenv("DB_SSLMODE") // 通常は "disable"
+	dbPort := os.Getenv("DB_PORT") // ここは dbPort としておくのが無難
+	sslmode := os.Getenv("DB_SSLMODE")
 
 	if sslmode == "" {
 		sslmode = "disable"
 	}
 
-	// DSN (Data Source Name) の構築
+	// DSN の構築 (変数を dbUser, dbPort に変更)
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
-		host, user, password, dbname, port, sslmode)
+		host, dbUser, password, dbname, dbPort, sslmode)
 
 	// 2. DB接続
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	// マイグレーション（テーブル作成）
-    db.AutoMigrate(&User{})
+	
+	// マイグレーション
+	db.AutoMigrate(&User{})
 
-    // IDを指定せずに作成
-    user := User{
-        Hash:  "****",
-        Story: 27,
-        Rate:  2527,
-    }
-    
-    // INSERT実行
-    db.Create(&user)
-
-    // 作成後は user.ID に自動生成されたUUIDが入っています
-    fmt.Println("Generated ID:", user.ID.String())
-
-    result := db.Create(&user)
-    if result.Error != nil {
-        // エラー処理
-        panic(result.Error)
-    }
-
-	// 2. リスナーの作成 (TCPポートを開く)
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// --- 起動時のデータ作成テスト (不要なら削除可) ---
+	// ここでの user は構造体のインスタンスなのでOK
+	demoUser := User{
+		Hash:  "****",
+		Story: 27,
+		Rate:  2527,
 	}
-	lis, err := net.Listen("tcp", ":"+port)
+	
+	// INSERT実行
+	result := db.Create(&demoUser)
+	if result.Error != nil {
+		panic(result.Error)
+	}
+	fmt.Println("Generated ID:", demoUser.ID.String())
+	// ------------------------------------------
+
+	// 3. リスナーの作成
+	// 【修正2】変数名を appPort に変更（上の dbPort と被らないように）
+	appPort := os.Getenv("PORT")
+	if appPort == "" {
+		appPort = "8080"
+	}
+	
+	lis, err := net.Listen("tcp", ":"+appPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	// 3. gRPCサーバーの作成
+	// 4. gRPCサーバーの起動
 	s := grpc.NewServer()
-	
-	// 実装したサービスを登録 (DBを渡す)
 	pb.RegisterUserServiceServer(s, &server{db: db})
-
-	// サーバーリフレクションの設定 (grpcurlなどで動作確認しやすくするため)
 	reflection.Register(s)
 
 	log.Printf("gRPC server listening at %v", lis.Addr())

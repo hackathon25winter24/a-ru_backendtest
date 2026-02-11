@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package user;
+option go_package = "./pb";
+
+service UserService {
+  // ID(UUID文字列)で検索
+  rpc GetUser (GetUserRequest) returns (UserResponse);
+  // ユーザー作成
+  rpc CreateUser (CreateUserRequest) returns (UserResponse);
+}
+
+message GetUserRequest {
+  string id = 1; // UUIDは文字列として受け取る
+}
+
+message CreateUserRequest {
+  string hash = 1;
+  int32 story = 2; // Goのintに合わせてint32またはint64
+  int32 rate = 3;
+}
+
+message UserResponse {
+  string id = 1;   // UUID
+  string hash = 2;
+  int32 story = 3;
+  int32 rate = 4;
+}

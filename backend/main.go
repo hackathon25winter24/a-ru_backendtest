@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
+	"net/http"
 	"os"
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"gorm.io/driver/mysql" // MariaDB用
 	"gorm.io/gorm"
 

@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -18,6 +18,16 @@ type User struct {
 }
 
 func main() {
+	// .envファイルを読み込む。
+	// 本番環境(NeoShowcase)には.envが無いのでエラーになるが、
+	// 本番では環境変数がシステムから注入されるので、このエラーは無視して続行してOK。
+	err := godotenv.Load()
+	if err != nil {
+		// .envが無かった場合。本番環境など。
+		fmt.Println("No .env file found, relying on system environment variables")
+	}
+
+
 	// 1. 環境変数から接続情報を取得（NeoShowcaseで設定される値）
 	host := os.Getenv("DB_HOST")
 	user := os.Getenv("DB_USER")

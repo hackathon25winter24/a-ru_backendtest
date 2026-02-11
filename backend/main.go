@@ -87,17 +87,24 @@ func main() {
 	// .envがあれば読み込む（ローカル用）、なければシステム環境変数を参照（NeoShowcase用）
 	_ = godotenv.Load()
 
-	// 1. 環境変数の取得
-	dbHost := os.Getenv("DB_HOST")
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbPort := os.Getenv("DB_PORT") // MariaDBなら通常 3306
+// 1. 環境変数の取得（NeoShowcaseのKeyに厳密に合わせる）
+dbHost := os.Getenv("NS_MARIADB_HOSTNAME")
+dbUser := os.Getenv("NS_MARIADB_USER")
+dbPass := os.Getenv("NS_MARIADB_PASSWORD")
+dbName := os.Getenv("NS_MARIADB_DATABASE")
+dbPort := os.Getenv("NS_MARIADB_PORT")
 
-	// 2. MariaDB (MySQL互換) 用の DSN 構築
-	// user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		dbUser, dbPass, dbHost, dbPort, dbName)
+// 【重要】デバッグログ：これを確認すれば原因がわかります
+log.Printf("DEBUG: Host=[%s] Port=[%s] User=[%s] DB=[%s]", dbHost, dbPort, dbUser, dbName)
+
+// 値が空の場合は、その場でプログラムを止める（:0 で進ませないため）
+if dbHost == "" || dbPort == "" {
+    log.Fatal("CRITICAL ERROR: 環境変数が読み込めていません。NeoShowcaseの設定を確認してください。")
+}
+
+// 2. MariaDB (MySQL互換) 用の DSN 構築
+dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+    dbUser, dbPass, dbHost, dbPort, dbName)
 
 	// 3. DB接続
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
@@ -112,11 +119,11 @@ func main() {
 	log.Println("Database connection and migration successful.")
 
 	// 4. gRPC サーバーの起動準備
+	// アプリ自体のポート（これは通常 PORT または 8080）
 	appPort := os.Getenv("PORT")
 	if appPort == "" {
-		appPort = "8080"
+   		appPort = "8080"
 	}
-
 // 1. gRPCサーバーの作成
 s := grpc.NewServer()
 pb.RegisterUserServiceServer(s, &server{db: db})

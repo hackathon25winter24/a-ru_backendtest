@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -80,12 +79,33 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 }
 
 func main() {
-	// 1. 設定読み込み & DB接続 (前回と同じ)
-	godotenv.Load()
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		os.Getenv("DB_HOST"), os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"), os.Getenv("DB_PORT"))
-	
+	// .envファイルを読み込む。
+	// 本番環境(NeoShowcase)には.envが無いのでエラーになるが、
+	// 本番では環境変数がシステムから注入されるので、このエラーは無視して続行してOK。
+	err := godotenv.Load()
+	if err != nil {
+		// .envが無かった場合。本番環境など。
+		fmt.Println("No .env file found, relying on system environment variables")
+	}
+
+
+	// 1. 環境変数から接続情報を取得（NeoShowcaseで設定される値）
+	host := os.Getenv("DB_HOST")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := os.Getenv("DB_NAME")
+	port := os.Getenv("DB_PORT")
+	sslmode := os.Getenv("DB_SSLMODE") // 通常は "disable"
+
+	if sslmode == "" {
+		sslmode = "disable"
+	}
+
+	// DSN (Data Source Name) の構築
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+		host, user, password, dbname, port, sslmode)
+
+	// 2. DB接続
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal(err)

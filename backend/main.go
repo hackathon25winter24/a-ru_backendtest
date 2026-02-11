@@ -81,6 +81,20 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 		Rate:  int32(user.Rate),
 	}, nil
 }
+<<<<<<< HEAD
+=======
+
+func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.UserResponse, error) {
+    var user User
+    if err := s.db.Where("hash = ?", req.Hash).First(&user).Error; err != nil {
+        return nil, fmt.Errorf("user not found")
+    }
+    return &pb.UserResponse{
+        Id: user.ID.String(), Hash: user.Hash, Story: int32(user.Story), Rate: int32(user.Rate),
+    }, nil
+}
+
+>>>>>>> ce7de9c0a6498ee990b6615bb1bf4e465284fd74
 // --- メイン処理 ---
 
 func main() {

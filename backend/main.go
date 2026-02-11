@@ -87,17 +87,24 @@ func main() {
 	// .envがあれば読み込む（ローカル用）、なければシステム環境変数を参照（NeoShowcase用）
 	_ = godotenv.Load()
 
-	// 1. 環境変数の取得
-	dbHost := os.Getenv("NS_MARIADB_HOSTNAME") // DB_HOST から変更
-	dbUser := os.Getenv("NS_MARIADB_USER")     // DB_USER から変更
-	dbPass := os.Getenv("NS_MARIADB_PASSWORD") // DB_PASSWORD から変更
-	dbName := os.Getenv("NS_MARIADB_DATABASE") // DB_NAME から変更
-	dbPort := os.Getenv("NS_MARIADB_PORT")     // DB_PORT から変更
+// 1. 環境変数の取得（NeoShowcaseのKeyに厳密に合わせる）
+dbHost := os.Getenv("NS_MARIADB_HOSTNAME")
+dbUser := os.Getenv("NS_MARIADB_USER")
+dbPass := os.Getenv("NS_MARIADB_PASSWORD")
+dbName := os.Getenv("NS_MARIADB_DATABASE")
+dbPort := os.Getenv("NS_MARIADB_PORT")
 
-	// 2. MariaDB (MySQL互換) 用の DSN 構築
-	// user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		dbUser, dbPass, dbHost, dbPort, dbName)
+// 【重要】デバッグログ：これを確認すれば原因がわかります
+log.Printf("DEBUG: Host=[%s] Port=[%s] User=[%s] DB=[%s]", dbHost, dbPort, dbUser, dbName)
+
+// 値が空の場合は、その場でプログラムを止める（:0 で進ませないため）
+if dbHost == "" || dbPort == "" {
+    log.Fatal("CRITICAL ERROR: 環境変数が読み込めていません。NeoShowcaseの設定を確認してください。")
+}
+
+// 2. MariaDB (MySQL互換) 用の DSN 構築
+dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+    dbUser, dbPass, dbHost, dbPort, dbName)
 
 	// 3. DB接続
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})

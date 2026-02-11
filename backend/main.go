@@ -81,6 +81,52 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 		Rate:  int32(user.Rate),
 	}, nil
 }
+
+func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
+    var users []User
+    // DBから全件取得
+    if err := s.db.Find(&users).Error; err != nil {
+        return nil, fmt.Errorf("failed to fetch users: %v", err)
+    }
+
+    // gRPC用のリストに詰め替える
+    var pbUsers []*pb.UserResponse
+    for _, u := range users {
+        pbUsers = append(pbUsers, &pb.UserResponse{
+            Id:    u.ID.String(),
+            Hash:  u.Hash,
+            Story: int32(u.Story),
+            Rate:  int32(u.Rate),
+        })
+    }
+
+    return &pb.ListUsersResponse{Users: pbUsers}, nil
+}
+
+
+// --- 他のメソッド（CreateUserなど）の下に追加 ---
+
+func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.UserResponse, error) {
+	var user User
+	
+	// DBからHashが一致する最初の1件を取得
+	// 見つからない場合はエラーが返ります
+	if err := s.db.Where("hash = ?", req.Hash).First(&user).Error; err != nil {
+		log.Printf("Login failed: user not found for hash %s", req.Hash)
+		return nil, fmt.Errorf("invalid hash or user not found")
+	}
+
+	log.Printf("Login successful: %s (ID: %s)", user.Hash, user.ID)
+
+	return &pb.UserResponse{
+		Id:    user.ID.String(),
+		Hash:  user.Hash,
+		Story: int32(user.Story),
+		Rate:  int32(user.Rate),
+	}, nil
+}
+
+
 // --- メイン処理 ---
 
 func main() {

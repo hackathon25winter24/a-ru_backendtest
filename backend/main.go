@@ -82,6 +82,16 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 	}, nil
 }
 
+func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.UserResponse, error) {
+    var user User
+    if err := s.db.Where("hash = ?", req.Hash).First(&user).Error; err != nil {
+        return nil, fmt.Errorf("user not found")
+    }
+    return &pb.UserResponse{
+        Id: user.ID.String(), Hash: user.Hash, Story: int32(user.Story), Rate: int32(user.Rate),
+    }, nil
+}
+
 // --- メイン処理 ---
 
 func main() {
@@ -130,19 +140,26 @@ s := grpc.NewServer()
 pb.RegisterUserServiceServer(s, &server{db: db})
 reflection.Register(s)
 
-// 2. gRPC-Web でラップする (これが Unity 接続の鍵です)
-wrappedServer := grpcweb.WrapServer(s)
+// 2. gRPC-Web でラップする (CORS 許可設定を追加)
+wrappedServer := grpcweb.WrapServer(s, 
+    grpcweb.WithOriginFunc(func(origin string) bool {
+        // すべてのオリジンからの接続を許可（開発中はこれが一番確実です）
+        return true 
+    }),
+)
 
-// 3. HTTPハンドラーを作成して、gRPC-Web と 通常のgRPC を振り分ける
+// 3. HTTPハンドラー
 handler := func(resp http.ResponseWriter, req *http.Request) {
+    // gRPC-Web のリクエストなら処理
     if wrappedServer.IsGrpcWebRequest(req) {
         wrappedServer.ServeHTTP(resp, req)
         return
     }
+    // 通常の gRPC も通す
     s.ServeHTTP(resp, req)
 }
 
-// 4. 標準の http.Server を使って 8080 ポートで起動
+// 4. HTTP サーバー起動
 httpServer := &http.Server{
     Addr:    ":" + appPort,
     Handler: http.HandlerFunc(handler),

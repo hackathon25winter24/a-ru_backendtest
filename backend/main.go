@@ -11,27 +11,38 @@ import (
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/mysql" // MariaDB用
 	"gorm.io/gorm"
 
-	// ↓ go.mod のモジュール名に合わせてください
+	// TODO: go.mod のモジュール名に合わせて書き換えてください
 	"my-app/pb"
 )
 
-// User モデル定義
+// --- モデル定義 ---
+
 type User struct {
-	ID    uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Hash  string
-	Story int
-	Rate  int
+	// MariaDBには専用のUUID型がないため、VARCHAR(36)として保存します
+	ID    uuid.UUID `gorm:"type:char(36);primaryKey" json:"id"`
+	Hash  string    `json:"hash"`
+	Story int       `json:"story"`
+	Rate  int       `json:"rate"`
 }
+
+// データを保存する直前にUUIDを自動生成するフック
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	if u.ID == uuid.Nil {
+		u.ID = uuid.New()
+	}
+	return
+}
+
+// --- gRPC サーバー実装 ---
 
 type server struct {
 	pb.UnimplementedUserServiceServer
 	db *gorm.DB
 }
 
-// CreateUser の実装
 func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.UserResponse, error) {
 	user := User{
 		Hash:  req.Hash,
@@ -51,7 +62,6 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 	}, nil
 }
 
-// GetUser の実装
 func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserResponse, error) {
 	uid, err := uuid.Parse(req.Id)
 	if err != nil {
@@ -71,73 +81,54 @@ func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserR
 	}, nil
 }
 
+// --- メイン処理 ---
+
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("No .env file found, relying on system environment variables")
-	}
+	// .envがあれば読み込む（ローカル用）、なければシステム環境変数を参照（NeoShowcase用）
+	_ = godotenv.Load()
 
-	// 1. DB接続情報の取得
-	host := os.Getenv("DB_HOST")
-	// 【修正1】変数名を dbUser に変更（構造体の user と被らないように）
+	// 1. 環境変数の取得
+	dbHost := os.Getenv("DB_HOST")
 	dbUser := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
-	dbPort := os.Getenv("DB_PORT") // ここは dbPort としておくのが無難
-	sslmode := os.Getenv("DB_SSLMODE")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	dbPort := os.Getenv("DB_PORT") // MariaDBなら通常 3306
 
-	if sslmode == "" {
-		sslmode = "disable"
-	}
+	// 2. MariaDB (MySQL互換) 用の DSN 構築
+	// user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		dbUser, dbPass, dbHost, dbPort, dbName)
 
-	// DSN の構築 (変数を dbUser, dbPort に変更)
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
-		host, dbUser, password, dbname, dbPort, sslmode)
-
-	// 2. DB接続
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// 3. DB接続
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to connect to MariaDB: %v", err)
 	}
-	
-	// マイグレーション
-	db.AutoMigrate(&User{})
 
-	// --- 起動時のデータ作成テスト (不要なら削除可) ---
-	// ここでの user は構造体のインスタンスなのでOK
-	demoUser := User{
-		Hash:  "****",
-		Story: 27,
-		Rate:  2527,
+	// テーブル自動作成
+	if err := db.AutoMigrate(&User{}); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
 	}
-	
-	// INSERT実行
-	result := db.Create(&demoUser)
-	if result.Error != nil {
-		panic(result.Error)
-	}
-	fmt.Println("Generated ID:", demoUser.ID.String())
-	// ------------------------------------------
+	log.Println("Database connection and migration successful.")
 
-	// 3. リスナーの作成
-	// 【修正2】変数名を appPort に変更（上の dbPort と被らないように）
+	// 4. gRPC サーバーの起動準備
 	appPort := os.Getenv("PORT")
 	if appPort == "" {
 		appPort = "8080"
 	}
-	
+
 	lis, err := net.Listen("tcp", ":"+appPort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("Failed to listen on port %s: %v", appPort, err)
 	}
 
-	// 4. gRPCサーバーの起動
+	// 5. サーバー登録
 	s := grpc.NewServer()
 	pb.RegisterUserServiceServer(s, &server{db: db})
-	reflection.Register(s)
+	reflection.Register(s) // grpcurl等での動作確認用
 
 	log.Printf("gRPC server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatalf("Failed to serve gRPC: %v", err)
 	}
 }

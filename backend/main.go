@@ -88,11 +88,11 @@ func main() {
 	_ = godotenv.Load()
 
 	// 1. 環境変数の取得
-	dbHost := os.Getenv("DB_HOST")
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbPort := os.Getenv("DB_PORT") // MariaDBなら通常 3306
+	dbHost := os.Getenv("NS_MARIADB_HOSTNAME") // DB_HOST から変更
+	dbUser := os.Getenv("NS_MARIADB_USER")     // DB_USER から変更
+	dbPass := os.Getenv("NS_MARIADB_PASSWORD") // DB_PASSWORD から変更
+	dbName := os.Getenv("NS_MARIADB_DATABASE") // DB_NAME から変更
+	dbPort := os.Getenv("NS_MARIADB_PORT")     // DB_PORT から変更
 
 	// 2. MariaDB (MySQL互換) 用の DSN 構築
 	// user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
@@ -112,11 +112,15 @@ func main() {
 	log.Println("Database connection and migration successful.")
 
 	// 4. gRPC サーバーの起動準備
+	// アプリ自体のポート（これは通常 PORT または 8080）
 	appPort := os.Getenv("PORT")
 	if appPort == "" {
-		appPort = "8080"
+   		appPort = "8080"
 	}
 
+	// 念のためログを出して確認（接続トラブル時に役立ちます）
+	log.Printf("Connecting to MariaDB at %s:%s", dbHost, dbPort)
+	
 	lis, err := net.Listen("tcp", ":"+appPort)
 	if err != nil {
 		log.Fatalf("Failed to listen on port %s: %v", appPort, err)

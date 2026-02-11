@@ -117,18 +117,31 @@ func main() {
 		appPort = "8080"
 	}
 
-	lis, err := net.Listen("tcp", ":"+appPort)
-	if err != nil {
-		log.Fatalf("Failed to listen on port %s: %v", appPort, err)
-	}
+// 1. gRPCサーバーの作成
+s := grpc.NewServer()
+pb.RegisterUserServiceServer(s, &server{db: db})
+reflection.Register(s)
 
-	// 5. サーバー登録
-	s := grpc.NewServer()
-	pb.RegisterUserServiceServer(s, &server{db: db})
-	reflection.Register(s) // grpcurl等での動作確認用
+// 2. gRPC-Web でラップする (これが Unity 接続の鍵です)
+wrappedServer := grpcweb.WrapServer(s)
 
-	log.Printf("gRPC server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve gRPC: %v", err)
-	}
+// 3. HTTPハンドラーを作成して、gRPC-Web と 通常のgRPC を振り分ける
+handler := func(resp http.ResponseWriter, req *http.Request) {
+    if wrappedServer.IsGrpcWebRequest(req) {
+        wrappedServer.ServeHTTP(resp, req)
+        return
+    }
+    s.ServeHTTP(resp, req)
+}
+
+// 4. 標準の http.Server を使って 8080 ポートで起動
+httpServer := &http.Server{
+    Addr:    ":" + appPort,
+    Handler: http.HandlerFunc(handler),
+}
+
+log.Printf("Server with gRPC-Web listening at %s", appPort) // ログが変わるはずです
+if err := httpServer.ListenAndServe(); err != nil {
+    log.Fatalf("failed to serve: %v", err)
+}
 }
